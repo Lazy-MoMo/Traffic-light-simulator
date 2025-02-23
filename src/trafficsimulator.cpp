@@ -3,7 +3,6 @@
 #include <ctime>
 #include <iostream>
 #include <mutex>
-#include <queue>
 #include <thread>
 #include <vector>
 
@@ -84,18 +83,23 @@ class Lane {
 public:
   sf::RectangleShape shape;
   sf::Color color;
+  sf::Color carColor;
   TrafficLight *trafficLight;
   std::vector<Car> cars;
 
   Lane(float x, float y, float width, float height, sf::Color color,
-       TrafficLight *trafficLight) {
+       sf::Color carColor, TrafficLight *trafficLight) {
     shape.setSize(sf::Vector2f(width, height));
     shape.setPosition(x, y);
     shape.setFillColor(color);
+    this->carColor = carColor;
     this->trafficLight = trafficLight;
   }
 
-  void addCar(Car car) { cars.push_back(car); }
+  void addCar(Car car) {
+    car.shape.setFillColor(carColor);
+    cars.push_back(car);
+  }
 
   void updateCars() {
     for (auto it = cars.begin(); it != cars.end();) {
@@ -124,6 +128,9 @@ public:
             shouldMove = false;
           }
         }
+        if (carPos.x >= 360 && carPos.x <= 380 && carPos.y >= 260 &&
+            carPos.y <= 280) {
+        }
       }
 
       if (shouldMove) {
@@ -146,9 +153,8 @@ public:
 };
 
 int main() {
-  sf::RenderWindow window(sf::VideoMode(800, 600), "Traffic Light Simulator",
-                          sf::Style::Fullscreen);
-  window.setFramerateLimit(60);
+  sf::RenderWindow window(sf::VideoMode(800, 600), "Traffic Light Simulator");
+  window.setFramerateLimit(165);
 
   sf::Font font;
   if (!font.loadFromFile(
@@ -157,7 +163,6 @@ int main() {
     return -1;
   }
 
-  // Roads
   Road roadA(200, 250, 400, 20, "Road A", font);
   Road roadB(200, 280, 400, 20, "Road B", font);
   Road roadC(350, 100, 20, 400, "Road C", font);
@@ -170,14 +175,20 @@ int main() {
   TrafficLight trafficLight4(350, 350, 100, 25);
 
   // Lanes for horizontal road
-  Lane lane1(200, 260, 400, 20, sf::Color::White, &trafficLight1);
-  Lane lane2(200, 290, 400, 20, sf::Color::White, &trafficLight1);
-  Lane lane3(200, 320, 400, 20, sf::Color::White, &trafficLight1);
+  Lane lane1(200, 260, 400, 20, sf::Color::White, sf::Color::Red,
+             &trafficLight1);
+  Lane lane2(200, 290, 400, 20, sf::Color::White, sf::Color::Red,
+             &trafficLight1);
+  Lane lane3(200, 320, 400, 20, sf::Color::White, sf::Color::Red,
+             &trafficLight1);
 
   // Lanes for vertical road
-  Lane lane4(360, 100, 20, 400, sf::Color::White, &trafficLight3);
-  Lane lane5(390, 100, 20, 400, sf::Color::White, &trafficLight3);
-  Lane lane6(420, 100, 20, 400, sf::Color::White, &trafficLight3);
+  Lane lane4(360, 100, 20, 400, sf::Color::White, sf::Color::Blue,
+             &trafficLight3);
+  Lane lane5(390, 100, 20, 400, sf::Color::White, sf::Color::Blue,
+             &trafficLight3);
+  Lane lane6(420, 100, 20, 400, sf::Color::White, sf::Color::Blue,
+             &trafficLight3);
 
   // Threads for traffic lights
   std::thread lightThread1(&TrafficLight::updateState, &trafficLight1);
@@ -204,24 +215,28 @@ int main() {
         float laneY =
             260 + (std::rand() % 3) *
                       30; // Randomly choose one of the horizontal lanes
-        lane1.addCar(Car(200, laneY, 40, 20, 0.5f,
-                         0.0f)); // Add a new car moving horizontally
-      } else if (side == 1) {    // Right side
+        if (laneY != 320) { // Ensure no car is added to the 3rd lane
+        lane1.addCar(Car(200, laneY, 20, 20, 0.5f, 0.0f)); // Red car
+        }
+      } else if (side == 1) {                              // Right side
         float laneY =
             260 + (std::rand() % 3) *
                       30; // Randomly choose one of the horizontal lanes
-        lane1.addCar(Car(600, laneY, 40, 20, -0.5f,
-                         0.0f)); // Add a new car moving horizontally
-      } else if (side == 2) {    // Top side
+        if (laneY != 260) { // Ensure no car is added to the 1st lane
+          lane1.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f)); // Red car
+        }
+      } else if (side == 2) {                               // Top side
         float laneX = 360 + (std::rand() % 3) *
                                 30; // Randomly choose one of the vertical lanes
-        lane4.addCar(Car(laneX, 100, 20, 40, 0.0f,
-                         0.5f)); // Add a new car moving vertically
-      } else if (side == 3) {    // Bottom side
+        if (laneX != 360) { // Ensure no car is added to lane 6
+          lane4.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f)); // Blue car
+        }
+      } else if (side == 3) {                              // Bottom side
         float laneX = 360 + (std::rand() % 3) *
                                 30; // Randomly choose one of the vertical lanes
-        lane4.addCar(Car(laneX, 500, 20, 40, 0.0f,
-                         -0.5f)); // Add a new car moving vertically
+        if (laneX != 420) { // Ensure no car is added to lane 4
+          lane4.addCar(Car(laneX, 500, 20, 20, 0.0f, -0.5f)); // Blue car
+        }
       }
     }
 
