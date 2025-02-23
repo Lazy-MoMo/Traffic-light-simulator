@@ -3,6 +3,7 @@
 #include <ctime>
 #include <iostream>
 #include <mutex>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -21,13 +22,19 @@ public:
   }
 
   void updateState() {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(
+        3, 7); // Random duration between 3 and 7 seconds
+
     while (true) {
-      std::this_thread::sleep_for(std::chrono::seconds(5));
+      int duration = dis(gen);
+      std::this_thread::sleep_for(std::chrono::seconds(duration));
       std::lock_guard<std::mutex> lock(lightMutex);
       state = (state + 1) % 2; // Cycle through states (Red and Green)
       shape.setFillColor(colors[state]);
       std::cout << "Light changed to: " << (state == 0 ? "Red" : "Green")
-                << std::endl;
+                << " after " << duration << " seconds" << std::endl;
     }
   }
 
@@ -101,6 +108,14 @@ public:
     cars.push_back(car);
   }
 
+  void transferCarToLane(Car &car) {
+    if (car.speedX > 0) {
+      car.speedX = 0.0f;
+      car.speedY = -0.5f;
+    }
+    // targetLane.addCar(car);
+  }
+
   void updateCars() {
     for (auto it = cars.begin(); it != cars.end();) {
       bool shouldMove = true;
@@ -128,9 +143,6 @@ public:
             shouldMove = false;
           }
         }
-        if (carPos.x >= 360 && carPos.x <= 380 && carPos.y >= 260 &&
-            carPos.y <= 280) {
-        }
       }
 
       if (shouldMove) {
@@ -139,6 +151,10 @@ public:
 
       if (it->isOutOfBounds(800, 600)) {
         it = cars.erase(it); // Remove car if it is out of bounds
+      } else if (carPos.x >= 360 && carPos.x <= 380 && carPos.y >= 260 &&
+                 carPos.y <= 280) {
+        // Transfer car to lane 4 (top side)
+        transferCarToLane(*it);
       } else {
         ++it;
       }
@@ -175,20 +191,33 @@ int main() {
   TrafficLight trafficLight4(350, 350, 100, 25);
 
   // Lanes for horizontal road
-  Lane lane1(200, 260, 400, 20, sf::Color::White, sf::Color::Red,
+  Lane lane1(200, 260, 150, 20, sf::Color::White, sf::Color::Red,
+             &trafficLight2);
+  Lane lane2(200, 290, 150, 20, sf::Color::White, sf::Color::Red,
+             &trafficLight2);
+  Lane lane3(200, 320, 150, 20, sf::Color::White, sf::Color::Red,
+             &trafficLight2);
+  Lane lane7(450, 260, 150, 20, sf::Color::White, sf::Color::Red,
              &trafficLight1);
-  Lane lane2(200, 290, 400, 20, sf::Color::White, sf::Color::Red,
+  Lane lane8(450, 290, 150, 20, sf::Color::White, sf::Color::Red,
              &trafficLight1);
-  Lane lane3(200, 320, 400, 20, sf::Color::White, sf::Color::Red,
+
+  Lane lane9(450, 320, 150, 20, sf::Color::White, sf::Color::Red,
              &trafficLight1);
 
   // Lanes for vertical road
-  Lane lane4(360, 100, 20, 400, sf::Color::White, sf::Color::Blue,
+  Lane lane4(360, 100, 20, 150, sf::Color::White, sf::Color::Blue,
              &trafficLight3);
-  Lane lane5(390, 100, 20, 400, sf::Color::White, sf::Color::Blue,
+  Lane lane5(390, 100, 20, 150, sf::Color::White, sf::Color::Blue,
              &trafficLight3);
-  Lane lane6(420, 100, 20, 400, sf::Color::White, sf::Color::Blue,
+  Lane lane6(420, 100, 20, 150, sf::Color::White, sf::Color::Blue,
              &trafficLight3);
+  Lane lane10(420, 350, 20, 150, sf::Color::White, sf::Color::Blue,
+              &trafficLight4);
+  Lane lane11(390, 350, 20, 150, sf::Color::White, sf::Color::Blue,
+              &trafficLight4);
+  Lane lane12(360, 350, 20, 150, sf::Color::White, sf::Color::Blue,
+              &trafficLight4);
 
   // Threads for traffic lights
   std::thread lightThread1(&TrafficLight::updateState, &trafficLight1);
@@ -215,27 +244,37 @@ int main() {
         float laneY =
             260 + (std::rand() % 3) *
                       30; // Randomly choose one of the horizontal lanes
-        if (laneY != 320) { // Ensure no car is added to the 3rd lane
-        lane1.addCar(Car(200, laneY, 20, 20, 0.5f, 0.0f)); // Red car
+        if (laneY == 260) {
+          lane1.addCar(Car(200, laneY, 20, 20, 0.5f, 0.0f)); // Red car
+        } else if (laneY == 290) {
+          lane2.addCar(Car(200, laneY, 20, 20, 0.5f, 0.0f)); // Red car
         }
-      } else if (side == 1) {                              // Right side
+      }
+
+      else if (side == 1) { // Right side
         float laneY =
             260 + (std::rand() % 3) *
                       30; // Randomly choose one of the horizontal lanes
-        if (laneY != 260) { // Ensure no car is added to the 1st lane
-          lane1.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f)); // Red car
+        if (laneY == 320) {
+          lane9.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f)); // Red car
+        } else if (laneY == 290) {
+          lane8.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f)); // Red car
         }
-      } else if (side == 2) {                               // Top side
+      } else if (side == 2) { // Top side
         float laneX = 360 + (std::rand() % 3) *
                                 30; // Randomly choose one of the vertical lanes
-        if (laneX != 360) { // Ensure no car is added to lane 6
-          lane4.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f)); // Blue car
+        if (laneX == 390) {
+          lane5.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f)); // Red car
+        } else if (laneX == 420) {
+          lane6.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f)); // Red car
         }
-      } else if (side == 3) {                              // Bottom side
+      } else if (side == 3) { // bottom side
         float laneX = 360 + (std::rand() % 3) *
                                 30; // Randomly choose one of the vertical lanes
-        if (laneX != 420) { // Ensure no car is added to lane 4
-          lane4.addCar(Car(laneX, 500, 20, 20, 0.0f, -0.5f)); // Blue car
+        if (laneX == 390) {
+          lane11.addCar(Car(laneX, 500, 20, 20, 0.0f, -0.5f)); // Red car
+        } else if (laneX == 360) {
+          lane12.addCar(Car(laneX, 500, 20, 20, 0.0f, -0.5f)); // Red car
         }
       }
     }
@@ -247,6 +286,12 @@ int main() {
     lane4.updateCars();
     lane5.updateCars();
     lane6.updateCars();
+    lane7.updateCars();
+    lane8.updateCars();
+    lane9.updateCars();
+    lane10.updateCars();
+    lane11.updateCars();
+    lane12.updateCars();
 
     {
       std::lock_guard<std::mutex> lock(lightMutex);
@@ -265,6 +310,12 @@ int main() {
       window.draw(lane4.shape);
       window.draw(lane5.shape);
       window.draw(lane6.shape);
+      window.draw(lane7.shape);
+      window.draw(lane8.shape);
+      window.draw(lane9.shape);
+      window.draw(lane10.shape);
+      window.draw(lane11.shape);
+      window.draw(lane12.shape);
       window.draw(trafficLight1.shape);
       window.draw(trafficLight2.shape);
       window.draw(trafficLight3.shape);
@@ -276,6 +327,12 @@ int main() {
       lane4.drawCars(window);
       lane5.drawCars(window);
       lane6.drawCars(window);
+      lane7.drawCars(window);
+      lane8.drawCars(window);
+      lane9.drawCars(window);
+      lane10.drawCars(window);
+      lane11.drawCars(window);
+      lane12.drawCars(window);
 
       window.display();
     }
