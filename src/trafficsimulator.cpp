@@ -12,8 +12,8 @@ std::mutex lightMutex;
 class TrafficLight {
 public:
   sf::RectangleShape shape;
-  sf::Color colors[3] = {sf::Color::Red, sf::Color::Yellow, sf::Color::Green};
-  int state = 0; // 0 = Red, 1 = Yellow, 2 = Green
+  sf::Color colors[2] = {sf::Color::Red, sf::Color::Green};
+  int state = 0; // 0 = Red, 1 = Green
 
   TrafficLight(float x, float y, float width, float height) {
     shape.setSize(sf::Vector2f(width, height));
@@ -25,15 +25,13 @@ public:
     while (true) {
       std::this_thread::sleep_for(std::chrono::seconds(5));
       std::lock_guard<std::mutex> lock(lightMutex);
-      state = (state + 1) % 3; // Cycle through states
+      state = (state + 1) % 2; // Cycle through states (Red and Green)
       shape.setFillColor(colors[state]);
-      std::cout << "Light changed to: "
-                << (state == 0   ? "Red"
-                    : state == 1 ? "Yellow"
-                                 : "Green")
+      std::cout << "Light changed to: " << (state == 0 ? "Red" : "Green")
                 << std::endl;
     }
   }
+
   bool isRed() { return state == 0; }
 };
 
@@ -106,7 +104,7 @@ public:
 
       // Check if the car is within the specified rectangular area
       bool inRectangularArea = (carPos.x >= 350 && carPos.x <= 450 &&
-                                carPos.y >= 200 && carPos.y <= 300);
+                                carPos.y >= 250 && carPos.y <= 350);
 
       if (trafficLight->isRed() && !inRectangularArea) {
         if (shape.getSize().x > shape.getSize().y) { // Horizontal lane
@@ -173,12 +171,12 @@ int main() {
 
   // Lanes for horizontal road
   Lane lane1(200, 260, 400, 20, sf::Color::White, &trafficLight1);
-  Lane lane2(200, 290, 400, 20, sf::Color::Yellow, &trafficLight1);
+  Lane lane2(200, 290, 400, 20, sf::Color::White, &trafficLight1);
   Lane lane3(200, 320, 400, 20, sf::Color::White, &trafficLight1);
 
   // Lanes for vertical road
   Lane lane4(360, 100, 20, 400, sf::Color::White, &trafficLight3);
-  Lane lane5(390, 100, 20, 400, sf::Color::Yellow, &trafficLight3);
+  Lane lane5(390, 100, 20, 400, sf::Color::White, &trafficLight3);
   Lane lane6(420, 100, 20, 400, sf::Color::White, &trafficLight3);
 
   // Threads for traffic lights
