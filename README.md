@@ -1,77 +1,128 @@
-# Traffic Light Simulator
+# Traffic Intersection Simulation
 
-A real-time traffic light simulator with moving traffic using **SDL2**, **SFML**, and **pthreads**. The simulator models an intersection with a queue-based traffic management system and priority-based lane control.
+## Overview
+
+This project is a traffic intersection simulation that models vehicle movement, traffic lights, and adaptive traffic management. The simulation uses SFML (Simple and Fast Multimedia Library) to create a visual representation of a four-way intersection with multiple lanes, traffic signals, and vehicle behavior.
 
 ## Features
 
-- **Four-way intersection** with roads A, B, C, and D.
-- **Three lanes per road**, with lane-wise priority queuing.
-- **Traffic light control** with synchronized signals for opposite lanes.
-- **Queue-based traffic management** ensuring fair vehicle dispatch.
-- **Priority lane handling:**
-  - **AL2 priority activation** when vehicle count exceeds 10.
-  - Reverts to normal when below 5.
-- **Multi-threading** for smooth simulation using `pthreads`.
+- Real-time traffic simulation with multiple lanes
+- Adaptive traffic light management based on traffic density
+- Priority-based scheduling for emergency lanes
+- Vehicle collision avoidance system
+- Different vehicle behaviors including straight movement and turning
+- Visual representation of roads, lanes, vehicles, and traffic lights
+
+## Requirements
+
+- C++ compiler with C++11 support
+- SFML library (2.5.0 or higher)
+- Standard C++ libraries: algorithm, cmath, cstdlib, ctime, iostream, mutex, vector
 
 ## Installation
 
-### Prerequisites
+### Install SFML
 
-Ensure you have the following installed:
+On Debian/Ubuntu systems:
 
-- `SFML` (if using SFML for rendering)
-- A C++ compiler supporting C++11 or later
-- `Make` (for build configuration)
+```bash
+sudo apt-get install libsfml-dev
+```
 
-### Build Instructions
+On Fedora:
 
-1. Clone the repository:
+```bash
+sudo dnf install SFML-devel
+```
 
-   ```bash
-   git clone https://github.com/Lazy-MoMo/Traffic-light-simulator.git
-   cd Traffic-light-simulator/src/
-   ```
+On macOS with Homebrew:
 
-2. Compile the project:
+```bash
+brew install sfml
+```
 
-   ```bash
-   make
-   ```
+### Build the Application
 
-3. Run the simulator:
+1. Clone this repository:
 
-   ```bash
-   ./traffic_simulator
-   ```
+```bash
+git clone https://github.com/Lazy-MoMo/traffic-simulation.git
+cd traffic-simulation
+```
 
-## Usage
+2. Compile the source code:
 
-- The traffic lights switch automatically based on the queue management system.
-- Vehicles move according to lane priority rules.
-- The simulation dynamically adjusts priority based on real-time queue conditions.
-- The interface visualizes the traffic flow and light changes in real time.
+```bash
+g++ -std=c++11 -o traffic_simulation main.cpp -lsfml-graphics -lsfml-window -lsfml-system
+```
 
-## Contribution
+## Running the Simulation
 
-Contributions are welcome! Feel free to submit issues or pull requests.
+Execute the compiled program:
 
-### To Contribute
+```bash
+./traffic_simulation
+```
 
-1. Fork the repository.
-2. Create a feature branch: `git checkout -b feature-name`
-3. Commit your changes: `git commit -m "Add feature"`
-4. Push to your branch: `git push origin feature-name`
-5. Open a pull request.
+- Press `Q` to quit the simulation.
 
-## License
+## How It Works
 
-This project is licensed under the [MIT License](LICENSE).
+### Intersection Layout
 
-## Author
+The simulation models a four-way intersection with:
 
-[Your Name](https://github.com/Lazy-MoMo)
+- Four roads (left, right, top, bottom)
+- Twelve lanes in total (3 for each direction)
+- Four traffic lights (one for each direction)
 
----
+### Traffic Management
 
-Feel free to modify the repository link and author details accordingly!
+The program implements an adaptive traffic management system:
 
+1. **Priority Lanes**: Designated lanes that get priority when they have more than 5 waiting vehicles
+2. **Waiting Vehicle Analysis**: Tracks stopped vehicles in each lane
+3. **Dynamic Green Light Duration**: Calculates optimal green light timing based on traffic density
+4. **Fairness Algorithm**: Ensures all directions get service even with varying traffic patterns
+
+### Vehicle Behavior
+
+Vehicles in the simulation exhibit the following behaviors:
+
+- Movement along lanes with appropriate speed
+- Stopping at red traffic lights
+- Maintaining safe distances from other vehicles
+- Turning behavior at intersections (straight, right turns)
+- Exit detection when vehicles leave the simulation area
+
+## Code Structure
+
+### Main Classes
+
+- `TrafficLight`: Manages traffic light states (red/green)
+- `Road`: Represents the road segments
+- `Car`: Models vehicle behavior, position, and movement
+- `Lane`: Manages a collection of cars and their interaction with traffic lights
+
+### Key Functions
+
+- `findLaneWithMostCars()`: Identifies the lane with highest traffic density
+- `calculateGreenDuration()`: Computes optimal green light timing
+- `countStopped()`: Counts stopped vehicles in a lane group
+- `calculateTotalWaiting()`: Determines total waiting vehicles
+
+## Customization
+
+You can modify various parameters in the code to customize the simulation:
+
+- Vehicle spawn rates
+- Vehicle speeds
+- Traffic light timing algorithms
+- Lane configurations
+- Priority thresholds
+
+## Notes
+
+- The simulation uses a mutex to prevent race conditions when updating traffic light states
+- Font path may need adjustment based on your system configuration
+- The framerate is limited to 300 FPS for consistent simulation timing
