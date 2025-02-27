@@ -195,6 +195,18 @@ public:
   }
 };
 
+Lane *findLaneWithMostCars(const std::vector<Lane *> &lanes) {
+  Lane *maxLane = nullptr;
+  int maxCount = 0;
+  for (auto lane : lanes) {
+    int count = lane->cars.size();
+    if (count > maxCount) {
+      maxCount = count;
+      maxLane = lane;
+    }
+  }
+  return maxLane;
+}
 // Utility function to count how many cars in a group of lanes are stopped.
 int countStopped(const std::vector<Lane *> &lanes) {
   int count = 0;
@@ -250,11 +262,11 @@ int main() {
              &trafficLight3);
   Lane lane6(420, 100, 20, 150, sf::Color::White, sf::Color::Blue,
              &trafficLight3, true);
-  Lane lane10(420, 350, 20, 150, sf::Color::White, sf::Color::Yellow,
+  Lane lane10(420, 350, 20, 150, sf::Color::White, sf::Color::Black,
               &trafficLight4); // bottom
-  Lane lane11(390, 350, 20, 150, sf::Color::White, sf::Color::Yellow,
+  Lane lane11(390, 350, 20, 150, sf::Color::White, sf::Color::Black,
               &trafficLight4);
-  Lane lane12(360, 350, 20, 150, sf::Color::White, sf::Color::Yellow,
+  Lane lane12(360, 350, 20, 150, sf::Color::White, sf::Color::Black,
               &trafficLight4, true);
 
   // Group lanes by side for priority checking.
@@ -264,6 +276,7 @@ int main() {
   std::vector<Lane *> bottomLanes = {&lane10, &lane11, &lane12};
 
   Side currentPriority = Side::NONE;
+  Lane *currentLane = nullptr;
 
   // Lambda to check if any car intersects a given region.
   auto anyCarInRegion = [&](const std::vector<Lane *> &lanes,
@@ -423,6 +436,31 @@ int main() {
         currentPriority = Side::TOP;
       else if (countBottom > 10)
         currentPriority = Side::BOTTOM;
+    }
+
+    // If no priority is set, find the lane with the most cars and set its light
+    // to green
+    if (currentPriority == Side::NONE) {
+      if (currentLane == nullptr || currentLane->cars.size() == 0) {
+        currentLane = findLaneWithMostCars({&lane1, &lane2, &lane3, &lane4,
+                                            &lane5, &lane6, &lane7, &lane8,
+                                            &lane9, &lane10, &lane11, &lane12});
+      }
+      if (currentLane != nullptr) {
+        if (std::find(leftLanes.begin(), leftLanes.end(), currentLane) !=
+            leftLanes.end()) {
+          currentPriority = Side::LEFT;
+        } else if (std::find(rightLanes.begin(), rightLanes.end(),
+                             currentLane) != rightLanes.end()) {
+          currentPriority = Side::RIGHT;
+        } else if (std::find(topLanes.begin(), topLanes.end(), currentLane) !=
+                   topLanes.end()) {
+          currentPriority = Side::TOP;
+        } else if (std::find(bottomLanes.begin(), bottomLanes.end(),
+                             currentLane) != bottomLanes.end()) {
+          currentPriority = Side::BOTTOM;
+        }
+      }
     }
 
     // Force only one light green at a time according to current priority.
