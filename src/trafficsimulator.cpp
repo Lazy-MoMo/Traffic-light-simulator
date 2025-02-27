@@ -1,6 +1,7 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Graphics/Rect.hpp>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
@@ -29,19 +30,11 @@ public:
 class Road {
 public:
   sf::RectangleShape shape;
-  sf::Text label;
 
-  Road(float x, float y, float width, float height, const std::string &name,
-       sf::Font &font) {
+  Road(float x, float y, float width, float height) {
     shape.setSize(sf::Vector2f(width, height));
     shape.setPosition(x, y);
     shape.setFillColor(sf::Color(50, 50, 50));
-    label.setFont(font);
-    label.setString(name);
-    label.setCharacterSize(24);
-    label.setFillColor(sf::Color::White);
-    label.setPosition(x + width / 2 - label.getGlobalBounds().width / 2,
-                      y + height / 2 - label.getGlobalBounds().height / 2);
   }
 };
 
@@ -70,13 +63,13 @@ public:
     return (pos.x < 0 || pos.x > windowWidth || pos.y < 0 ||
             pos.y > windowHeight);
   }
-  
+
   sf::FloatRect getCollisionBounds() const {
     // Get the car's bounding box
     return shape.getGlobalBounds();
   }
-  
-  bool isColliding(const Car& other) const {
+
+  bool isColliding(const Car &other) const {
     return getCollisionBounds().intersects(other.getCollisionBounds());
   }
 };
@@ -89,11 +82,14 @@ public:
   TrafficLight *trafficLight;
   std::vector<Car> cars;
   bool ignoreTrafficLight;
+  bool isPriority;
+  int waitingVehicles;
 
   Lane(float x, float y, float width, float height, sf::Color color,
        sf::Color carColor, TrafficLight *trafficLight,
-       bool ignoreTrafficLight = false)
-      : ignoreTrafficLight(ignoreTrafficLight) {
+       bool ignoreTrafficLight = false, bool isPriority = false)
+      : ignoreTrafficLight(ignoreTrafficLight), isPriority(isPriority),
+        waitingVehicles(0) {
     shape.setSize(sf::Vector2f(width, height));
     shape.setPosition(x, y);
     shape.setFillColor(color);
@@ -105,69 +101,73 @@ public:
     // Check if there is enough space to add the car without collision
     Car newCar = car;
     newCar.shape.setFillColor(carColor);
-    
+
     // Check for collisions with existing cars
-    for (const auto& existingCar : cars) {
+    for (const auto &existingCar : cars) {
       if (newCar.isColliding(existingCar)) {
         // Don't add car if it would collide
         return;
       }
     }
-    
+
     cars.push_back(newCar);
   }
 
   void updateCars() {
-    const float stopThreshold = 10.0f; // Distance threshold before stopping
+    const float stopThreshold = 10.0f;  // Distance threshold before stopping
     const float collisionBuffer = 8.0f; // Minimum distance between cars
-    
+
     for (auto it = cars.begin(); it != cars.end();) {
       bool shouldMove = true;
       sf::Vector2f carPos = it->shape.getPosition();
       bool inRectangularArea = (carPos.x >= 350 && carPos.x <= 450 &&
-                               carPos.y >= 250 && carPos.y <= 350);
+                                carPos.y >= 250 && carPos.y <= 350);
 
       // Check collision with other cars in the same lane
-      for (auto& otherCar : cars) {
+      for (auto &otherCar : cars) {
         // Skip self comparison
         if (&otherCar == &(*it)) {
           continue;
         }
-        
+
         // Calculate future position
         sf::Vector2f futurePos = carPos;
         futurePos.x += it->speedX;
         futurePos.y += it->speedY;
-        
+
         // Temporary car at future position to check collision
         Car futureCar = *it;
         futureCar.shape.setPosition(futurePos);
-        
+
         // Check if future position would cause collision
         if (futureCar.isColliding(otherCar)) {
           shouldMove = false;
           it->stopped = true;
           break;
         }
-        
-        // Check for safe distance between cars (for cars going in the same direction)
-        if ((it->speedX * otherCar.speedX > 0 || it->speedY * otherCar.speedY > 0)) {
+
+        // Check for safe distance between cars (for cars going in the same
+        // direction)
+        if ((it->speedX * otherCar.speedX > 0 ||
+             it->speedY * otherCar.speedY > 0)) {
           sf::Vector2f otherPos = otherCar.shape.getPosition();
           float distance = 0.0f;
-          
+
           // Calculate distance in the direction of movement
-          if (abs(it->speedX) > 0) { // Horizontal movement
-            if ((it->speedX > 0 && otherPos.x > carPos.x) || 
+          if (std::fabs(it->speedX) > 0) { // Horizontal movement
+            if ((it->speedX > 0 && otherPos.x > carPos.x) ||
                 (it->speedX < 0 && otherPos.x < carPos.x)) {
-              distance = abs(otherPos.x - carPos.x) - it->shape.getSize().x;
+              distance =
+                  std::fabs(otherPos.x - carPos.x) - it->shape.getSize().x;
             }
-          } else if (abs(it->speedY) > 0) { // Vertical movement
-            if ((it->speedY > 0 && otherPos.y > carPos.y) || 
+          } else if (std::fabs(it->speedY) > 0) { // Vertical movement
+            if ((it->speedY > 0 && otherPos.y > carPos.y) ||
                 (it->speedY < 0 && otherPos.y < carPos.y)) {
-              distance = abs(otherPos.y - carPos.y) - it->shape.getSize().y;
+              distance =
+                  std::fabs(otherPos.y - carPos.y) - it->shape.getSize().y;
             }
           }
-          
+
           // If cars are too close in the direction of movement, stop
           if (distance > 0 && distance < collisionBuffer) {
             shouldMove = false;
@@ -178,7 +178,8 @@ public:
       }
 
       // Traffic light check (only if collision check passed)
-      if (shouldMove && !ignoreTrafficLight && trafficLight->isRed() && !inRectangularArea) {
+      if (shouldMove && !ignoreTrafficLight && trafficLight->isRed() &&
+          !inRectangularArea) {
         if (shape.getSize().x > shape.getSize().y) { // Horizontal lane
           if (it->speedX > 0) {                      // Car moving right
             float carRight = carPos.x + it->shape.getSize().x;
@@ -219,7 +220,7 @@ public:
         it->stopped = true;
       }
 
-      if (it->isOutOfBounds(800, 600)) {
+      if (it->isOutOfBounds(720, 600)) {
         it = cars.erase(it);
       } else if (carPos.x >= 360 && carPos.x <= 380 && carPos.y >= 260 &&
                  carPos.y <= 280) {
@@ -240,8 +241,8 @@ public:
         it->speedX = -0.5f;
         ++it; // Advance the iterator
       } else if (it->isRight && !it->hasTurned && carPos.x >= 410 &&
-               carPos.x <= 430 && carPos.y >= 310 && carPos.y <= 330 &&
-               it->speedY > 0) {
+                 carPos.x <= 430 && carPos.y >= 310 && carPos.y <= 330 &&
+                 it->speedY > 0) {
         it->speedY = 0.0f;
         it->speedX = -0.5f;
         it->hasTurned = true;
@@ -270,6 +271,15 @@ public:
     }
   }
 
+  void updateWaitingCount() {
+    waitingVehicles = 0;
+    for (auto &car : cars) {
+      if (car.stopped) {
+        waitingVehicles++;
+      }
+    }
+  }
+
   void drawCars(sf::RenderWindow &window) {
     for (auto &car : cars) {
       window.draw(car.shape);
@@ -289,7 +299,8 @@ Lane *findLaneWithMostCars(const std::vector<Lane *> &lanes) {
   }
   return maxLane;
 }
-// Utility function to count how many cars in a group of lanes are stopped.
+
+// Count how many cars in a group of lanes are stopped
 int countStopped(const std::vector<Lane *> &lanes) {
   int count = 0;
   for (auto lane : lanes) {
@@ -299,6 +310,55 @@ int countStopped(const std::vector<Lane *> &lanes) {
     }
   }
   return count;
+}
+
+// Calculate total waiting vehicles for a group of lanes
+int calculateTotalWaiting(const std::vector<Lane *> &lanes) {
+  int total = 0;
+  for (auto lane : lanes) {
+    if (!lane->isPriority) { // Only count normal lanes
+      total += lane->waitingVehicles;
+    }
+  }
+  return total;
+}
+
+// Calculate green light duration based on waiting vehicles
+float calculateGreenDuration(const std::vector<Lane *> &allLanes,
+                             const std::vector<Lane *> &activeLanes) {
+  int totalNormalLanes = 0;
+  int totalWaitingVehicles = 0;
+
+  // Count normal lanes and their waiting vehicles
+  for (auto lane : allLanes) {
+    if (!lane->isPriority) {
+      totalNormalLanes++;
+      totalWaitingVehicles += lane->waitingVehicles;
+    }
+  }
+
+  if (totalNormalLanes == 0)
+    return 5.0f; // Default duration if no normal lanes
+
+  // Calculate |V| according to the formula: |V| = 1/n * sum(Li)
+  float vehiclesToServe = (float)totalWaitingVehicles / totalNormalLanes;
+
+  // Calculate time: Total time = |V| * t
+  // Assuming t = 1.0 second per vehicle
+  const float timePerVehicle = 1.0f;
+  return std::max(3.0f, vehiclesToServe * timePerVehicle); // Minimum 3 seconds
+}
+
+// Check if any car intersects a given region
+bool anyCarInRegion(const std::vector<Lane *> &lanes,
+                    const sf::FloatRect &region) {
+  for (auto lane : lanes) {
+    for (auto &car : lane->cars) {
+      if (car.shape.getGlobalBounds().intersects(region))
+        return true;
+    }
+  }
+  return false;
 }
 
 int main() {
@@ -313,10 +373,10 @@ int main() {
   }
 
   // Create roads
-  Road roadA(200, 250, 400, 20, "Road A", font);
-  Road roadB(200, 280, 400, 20, "Road B", font);
-  Road roadC(350, 100, 20, 400, "Road C", font);
-  Road roadD(380, 100, 20, 400, "Road D", font);
+  Road roadA(100, 250, 400, 120);
+  Road roadB(470, 250, 250, 120);
+  Road roadC(350, 000, 120, 400);
+  Road roadD(350, 370, 120, 400);
 
   // Create traffic lights (we control their states via priority check)
   TrafficLight trafficLight1(470, 250, 25, 120); // Right side
@@ -325,19 +385,18 @@ int main() {
   TrafficLight trafficLight4(350, 370, 120, 25); // Bottom side
 
   // Create lanes
-  // Horizontal lanes: left side (trafficLight2) and right side
-  // (trafficLight1)
-  Lane lane1(100, 260, 250, 20, sf::Color::White, sf::Color(125,5,82),
-             &trafficLight2, true); // left
-  Lane lane2(100, 290, 250, 40, sf::Color::White, sf::Color(125,5,82),
+  // Horizontal lanes: left side (trafficLight2) and right side (trafficLight1)
+  Lane lane1(100, 260, 250, 20, sf::Color::White, sf::Color(125, 5, 82),
+             &trafficLight2, true, true); // left priority lane
+  Lane lane2(100, 290, 250, 40, sf::Color::White, sf::Color(125, 5, 82),
              &trafficLight2);
-  Lane lane3(100, 340, 250, 20, sf::Color::White, sf::Color(125,5,82),
+  Lane lane3(100, 340, 250, 20, sf::Color::White, sf::Color(125, 5, 82),
              &trafficLight2);
-  Lane lane7(470, 260, 250, 20, sf::Color::White, sf::Color(210,145,188),
+  Lane lane7(470, 260, 250, 20, sf::Color::White, sf::Color(210, 145, 188),
              &trafficLight1); // right
-  Lane lane8(470, 290, 250, 40, sf::Color::White, sf::Color(210,145,188),
+  Lane lane8(470, 290, 250, 40, sf::Color::White, sf::Color(210, 145, 188),
              &trafficLight1);
-  Lane lane9(470, 340, 250, 20, sf::Color::White, sf::Color(210,145,188),
+  Lane lane9(470, 340, 250, 20, sf::Color::White, sf::Color(210, 145, 188),
              &trafficLight1, true);
   Lane lane4(360, 000, 20, 250, sf::Color::White, sf::Color::Blue,
              &trafficLight3); // top
@@ -346,7 +405,7 @@ int main() {
   Lane lane6(440, 000, 20, 250, sf::Color::White, sf::Color::Blue,
              &trafficLight3, true);
   Lane lane10(440, 370, 20, 250, sf::Color::White, sf::Color::Black,
-              &trafficLight4); // bottom
+              &trafficLight4, true, true); // bottom priority lane
   Lane lane11(390, 370, 40, 250, sf::Color::White, sf::Color::Black,
               &trafficLight4);
   Lane lane12(360, 370, 20, 250, sf::Color::White, sf::Color::Black,
@@ -358,20 +417,18 @@ int main() {
   std::vector<Lane *> topLanes = {&lane4, &lane5, &lane6};
   std::vector<Lane *> bottomLanes = {&lane10, &lane11, &lane12};
 
+  // Create a vector of all lanes to simplify operations
+  std::vector<Lane *> allLanes = {&lane1, &lane2,  &lane3,  &lane4,
+                                  &lane5, &lane6,  &lane7,  &lane8,
+                                  &lane9, &lane10, &lane11, &lane12};
+
   Side currentPriority = Side::NONE;
   Lane *currentLane = nullptr;
 
-  // Lambda to check if any car intersects a given region.
-  auto anyCarInRegion = [&](const std::vector<Lane *> &lanes,
-                            const sf::FloatRect &region) -> bool {
-    for (auto lane : lanes) {
-      for (auto &car : lane->cars) {
-        if (car.shape.getGlobalBounds().intersects(region))
-          return true;
-      }
-    }
-    return false;
-  };
+  // Timing variables
+  float greenTimer = 0.0f;
+  float greenDuration = 0.0f;
+  const float frameTime = 1.0f / 300.0f; // Based on framerate limit
 
   std::srand(std::time(nullptr));
 
@@ -435,29 +492,37 @@ int main() {
       }
     }
 
+    // Update waiting counts for all lanes
+    for (auto lane : allLanes) {
+      lane->updateWaitingCount();
+    }
+
     // Update cars in all lanes
-    lane1.updateCars();
-    lane2.updateCars();
-    lane3.updateCars();
-    lane4.updateCars();
-    lane5.updateCars();
-    lane6.updateCars();
-    lane7.updateCars();
-    lane8.updateCars();
-    lane9.updateCars();
-    lane10.updateCars();
-    lane11.updateCars();
-    lane12.updateCars();
+    for (auto lane : allLanes) {
+      lane->updateCars();
+    }
+
+    // Timer logic for green light duration
+    if (currentPriority != Side::NONE) {
+      greenTimer += frameTime;
+      if (greenTimer >= greenDuration) {
+        currentPriority = Side::NONE;
+        greenTimer = 0.0f;
+      }
+    }
 
     // === PRIORITY CHECK ===
     // Define the base intersection region where cars are considered waiting.
     sf::FloatRect intersectionRegion(350, 250, 100, 100);
 
-    // Count the stopped cars in each group.
-    int countLeft = countStopped(leftLanes);
-    int countRight = countStopped(rightLanes);
-    int countTop = countStopped(topLanes);
-    int countBottom = countStopped(bottomLanes);
+    // Check for priority lanes with more than 5 waiting vehicles
+    Lane *priorityLane = nullptr;
+    for (auto lane : allLanes) {
+      if (lane->isPriority && lane->waitingVehicles > 5) {
+        priorityLane = lane;
+        break;
+      }
+    }
 
     // Determine active traffic light and lanes based on current priority.
     TrafficLight *activeTrafficLight = nullptr;
@@ -493,56 +558,84 @@ int main() {
           extendedRegion.top;
     }
 
-    // If there is an active priority, check if its waiting count is below 5
-    // and no car is overlapping the extended region.
-    if (currentPriority != Side::NONE && activeTrafficLight != nullptr &&
-        activeLanes != nullptr) {
-      int activeCount = 0;
-      for (auto lane : *activeLanes) {
-        for (auto &car : lane->cars) {
-          if (car.stopped)
-            activeCount++;
-        }
-      }
-      if (activeCount < 5 && !anyCarInRegion(*activeLanes, extendedRegion))
-        currentPriority = Side::NONE;
-    }
-
-    // If no priority is set, assign one if any group has more than 10 stopped
-    // cars.
-    if (currentPriority == Side::NONE) {
-      if (countLeft > 10)
+    // If a priority lane needs service and no current priority, give it
+    // priority
+    if (currentPriority == Side::NONE && priorityLane != nullptr) {
+      if (priorityLane == &lane1 || priorityLane == &lane2 ||
+          priorityLane == &lane3) {
         currentPriority = Side::LEFT;
-      else if (countRight > 10)
+        greenDuration = calculateGreenDuration(allLanes, leftLanes);
+      } else if (priorityLane == &lane7 || priorityLane == &lane8 ||
+                 priorityLane == &lane9) {
         currentPriority = Side::RIGHT;
-      else if (countTop > 10)
+        greenDuration = calculateGreenDuration(allLanes, rightLanes);
+      } else if (priorityLane == &lane4 || priorityLane == &lane5 ||
+                 priorityLane == &lane6) {
         currentPriority = Side::TOP;
-      else if (countBottom > 10)
+        greenDuration = calculateGreenDuration(allLanes, topLanes);
+      } else if (priorityLane == &lane10 || priorityLane == &lane11 ||
+                 priorityLane == &lane12) {
         currentPriority = Side::BOTTOM;
+        greenDuration = calculateGreenDuration(allLanes, bottomLanes);
+      }
+      greenTimer = 0.0f;
     }
 
-    // If no priority is set, find the lane with the most cars and set its
-    // light to green
+    // If no priority is set, find the lane group with the highest total waiting
+    // vehicles
+    if (currentPriority == Side::NONE) {
+      int leftTotal = calculateTotalWaiting(leftLanes);
+      int rightTotal = calculateTotalWaiting(rightLanes);
+      int topTotal = calculateTotalWaiting(topLanes);
+      int bottomTotal = calculateTotalWaiting(bottomLanes);
+
+      // Find the direction with the highest waiting vehicles
+      int maxTotal = std::max({leftTotal, rightTotal, topTotal, bottomTotal});
+
+      if (maxTotal > 0) {
+        if (maxTotal == leftTotal) {
+          currentPriority = Side::LEFT;
+          greenDuration = calculateGreenDuration(allLanes, leftLanes);
+        } else if (maxTotal == rightTotal) {
+          currentPriority = Side::RIGHT;
+          greenDuration = calculateGreenDuration(allLanes, rightLanes);
+        } else if (maxTotal == topTotal) {
+          currentPriority = Side::TOP;
+          greenDuration = calculateGreenDuration(allLanes, topLanes);
+        } else {
+          currentPriority = Side::BOTTOM;
+          greenDuration = calculateGreenDuration(allLanes, bottomLanes);
+        }
+        greenTimer = 0.0f;
+      }
+    }
+
+    // If still no priority is set, use the original method to find lane with
+    // most cars
     if (currentPriority == Side::NONE) {
       if (currentLane == nullptr || currentLane->cars.size() == 0) {
-        currentLane = findLaneWithMostCars({&lane1, &lane2, &lane3, &lane4,
-                                            &lane5, &lane6, &lane7, &lane8,
-                                            &lane9, &lane10, &lane11, &lane12});
+        currentLane = findLaneWithMostCars(allLanes);
       }
+
       if (currentLane != nullptr) {
         if (std::find(leftLanes.begin(), leftLanes.end(), currentLane) !=
             leftLanes.end()) {
           currentPriority = Side::LEFT;
+          greenDuration = 5.0f; // Default duration
         } else if (std::find(rightLanes.begin(), rightLanes.end(),
                              currentLane) != rightLanes.end()) {
           currentPriority = Side::RIGHT;
+          greenDuration = 5.0f; // Default duration
         } else if (std::find(topLanes.begin(), topLanes.end(), currentLane) !=
                    topLanes.end()) {
           currentPriority = Side::TOP;
+          greenDuration = 5.0f; // Default duration
         } else if (std::find(bottomLanes.begin(), bottomLanes.end(),
                              currentLane) != bottomLanes.end()) {
           currentPriority = Side::BOTTOM;
+          greenDuration = 5.0f; // Default duration
         }
+        greenTimer = 0.0f;
       }
     }
 
@@ -595,10 +688,6 @@ int main() {
       window.draw(roadB.shape);
       window.draw(roadC.shape);
       window.draw(roadD.shape);
-      window.draw(roadA.label);
-      window.draw(roadB.label);
-      window.draw(roadC.label);
-      window.draw(roadD.label);
       window.draw(lane1.shape);
       window.draw(lane2.shape);
       window.draw(lane3.shape);
