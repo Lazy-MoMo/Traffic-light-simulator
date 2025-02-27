@@ -1,14 +1,15 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Graphics/Rect.hpp>
+#include <algorithm>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
 #include <mutex>
-#include <random>
-#include <thread>
 #include <vector>
 
 std::mutex lightMutex;
+
+enum class Side { NONE, LEFT, RIGHT, TOP, BOTTOM };
 
 class TrafficLight {
 public:
@@ -20,23 +21,6 @@ public:
     shape.setSize(sf::Vector2f(width, height));
     shape.setPosition(x, y);
     shape.setFillColor(colors[state]);
-  }
-
-  void updateState() {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(
-        3, 7); // Random duration between 3 and 7 seconds
-
-    while (true) {
-      int duration = dis(gen);
-      std::this_thread::sleep_for(std::chrono::seconds(duration));
-      std::lock_guard<std::mutex> lock(lightMutex);
-      state = (state + 1) % 2; // Cycle through states (Red and Green)
-      shape.setFillColor(colors[state]);
-      std::cout << "Light changed to: " << (state == 0 ? "Red" : "Green")
-                << " after " << duration << " seconds" << std::endl;
-    }
   }
 
   bool isRed() { return state == 0; }
@@ -51,12 +35,11 @@ public:
        sf::Font &font) {
     shape.setSize(sf::Vector2f(width, height));
     shape.setPosition(x, y);
-    shape.setFillColor(sf::Color(50, 50, 50)); // Dark gray road color
-
+    shape.setFillColor(sf::Color(50, 50, 50));
     label.setFont(font);
     label.setString(name);
     label.setCharacterSize(24);
-    label.setFillColor(sf::Color::White); // Set text color to white
+    label.setFillColor(sf::Color::White);
     label.setPosition(x + width / 2 - label.getGlobalBounds().width / 2,
                       y + height / 2 - label.getGlobalBounds().height / 2);
   }
@@ -65,27 +48,22 @@ public:
 class Car {
 public:
   sf::RectangleShape shape;
-  float speedX;
-  float speedY;
+  float speedX, speedY;
   bool isStraight;
   bool isRight;
   bool hasTurned;
+  bool stopped;
 
   Car(float x, float y, float width, float height, float speedX, float speedY,
-      bool isStraight, bool isRight, bool hasTurned) {
+      bool isStraight, bool isRight, bool hasTurned = false)
+      : speedX(speedX), speedY(speedY), isStraight(isStraight),
+        isRight(isRight), hasTurned(hasTurned), stopped(false) {
     shape.setSize(sf::Vector2f(width, height));
     shape.setPosition(x, y);
-    shape.setFillColor(sf::Color::Blue); // Default car color
-    this->speedX = speedX;
-    this->speedY = speedY;
-    this->isStraight = isStraight;
-    this->isRight = isRight;
-    this->hasTurned = hasTurned;
+    shape.setFillColor(sf::Color::Blue);
   }
 
-  void move() {
-    shape.move(speedX, speedY); // Move the car
-  }
+  void move() { shape.move(speedX, speedY); }
 
   bool isOutOfBounds(float windowWidth, float windowHeight) {
     sf::Vector2f pos = shape.getPosition();
@@ -101,9 +79,12 @@ public:
   sf::Color carColor;
   TrafficLight *trafficLight;
   std::vector<Car> cars;
+  bool ignoreTrafficLight;
 
   Lane(float x, float y, float width, float height, sf::Color color,
-       sf::Color carColor, TrafficLight *trafficLight) {
+       sf::Color carColor, TrafficLight *trafficLight,
+       bool ignoreTrafficLight = false)
+      : ignoreTrafficLight(ignoreTrafficLight) {
     shape.setSize(sf::Vector2f(width, height));
     shape.setPosition(x, y);
     shape.setFillColor(color);
@@ -111,57 +92,65 @@ public:
     this->trafficLight = trafficLight;
   }
 
-  void addCar(Car car) {
-    car.shape.setFillColor(carColor);
-    cars.push_back(car);
+  void addCar(const Car &car) {
+    Car c = car;
+    c.shape.setFillColor(carColor);
+    cars.push_back(c);
   }
 
-  // void transferCarToLane(Car &car) {
-  //   if (car.speedX > 0) {
-  //   } else if (car.speedY > 0) {
-  //     car.speedY = 0.0f;
-  //     car.speedX = 0.5f;
-  //   }
-  // }
-
   void updateCars() {
+    const float stopThreshold = 10.0f; // Distance threshold before stopping
     for (auto it = cars.begin(); it != cars.end();) {
       bool shouldMove = true;
       sf::Vector2f carPos = it->shape.getPosition();
-
-      // Check if the car is within the specified rectangular area
       bool inRectangularArea = (carPos.x >= 350 && carPos.x <= 450 &&
                                 carPos.y >= 250 && carPos.y <= 350);
 
-      if (trafficLight->isRed() && !inRectangularArea) {
+      if (!ignoreTrafficLight && trafficLight->isRed() && !inRectangularArea) {
         if (shape.getSize().x > shape.getSize().y) { // Horizontal lane
-          if (it->speedX > 0 &&
-              carPos.x <= trafficLight->shape.getPosition().x) {
-            shouldMove = false;
-          } else if (it->speedX < 0 &&
-                     carPos.x >= trafficLight->shape.getPosition().x) {
-            shouldMove = false;
+          if (it->speedX > 0) {                      // Car moving right
+            float carRight = carPos.x + it->shape.getSize().x;
+            float lightLeft = trafficLight->shape.getPosition().x;
+            float gap = lightLeft - carRight;
+            if (gap > 0 && gap < stopThreshold)
+              shouldMove = false;
+          } else if (it->speedX < 0) { // Car moving left
+            float carLeft = carPos.x;
+            float lightRight = trafficLight->shape.getPosition().x +
+                               trafficLight->shape.getSize().x;
+            float gap = carLeft - lightRight;
+            if (gap > 0 && gap < stopThreshold)
+              shouldMove = false;
           }
-        } else { // Vertical lane
-          if (it->speedY > 0 &&
-              carPos.y <= trafficLight->shape.getPosition().y) {
-            shouldMove = false;
-          } else if (it->speedY < 0 &&
-                     carPos.y >= trafficLight->shape.getPosition().y) {
-            shouldMove = false;
+        } else {                // Vertical lane
+          if (it->speedY > 0) { // Car moving down
+            float carBottom = carPos.y + it->shape.getSize().y;
+            float lightTop = trafficLight->shape.getPosition().y;
+            float gap = lightTop - carBottom;
+            if (gap > 0 && gap < stopThreshold)
+              shouldMove = false;
+          } else if (it->speedY < 0) { // Car moving up
+            float carTop = carPos.y;
+            float lightBottom = trafficLight->shape.getPosition().y +
+                                trafficLight->shape.getSize().y;
+            float gap = carTop - lightBottom;
+            if (gap > 0 && gap < stopThreshold)
+              shouldMove = false;
           }
         }
       }
 
       if (shouldMove) {
         it->move();
+        it->stopped = false;
+      } else {
+        it->stopped = true;
       }
 
       if (it->isOutOfBounds(800, 600)) {
         it = cars.erase(it);
       } else if (carPos.x >= 360 && carPos.x <= 380 && carPos.y >= 260 &&
                  carPos.y <= 280) {
-        // Transfer car to lane 4 (top side)
         it->speedX = 0.0f;
         it->speedY = -0.5f;
         ++it; // Advance the iterator
@@ -206,6 +195,18 @@ public:
   }
 };
 
+// Utility function to count how many cars in a group of lanes are stopped.
+int countStopped(const std::vector<Lane *> &lanes) {
+  int count = 0;
+  for (auto lane : lanes) {
+    for (auto &car : lane->cars) {
+      if (car.stopped)
+        count++;
+    }
+  }
+  return count;
+}
+
 int main() {
   sf::RenderWindow window(sf::VideoMode(800, 600), "Traffic Light Simulator");
   window.setFramerateLimit(300);
@@ -217,51 +218,64 @@ int main() {
     return -1;
   }
 
+  // Create roads
   Road roadA(200, 250, 400, 20, "Road A", font);
   Road roadB(200, 280, 400, 20, "Road B", font);
   Road roadC(350, 100, 20, 400, "Road C", font);
   Road roadD(380, 100, 20, 400, "Road D", font);
 
-  // Traffic lights
-  TrafficLight trafficLight1(450, 250, 25, 100);
-  TrafficLight trafficLight2(325, 250, 25, 100);
-  TrafficLight trafficLight3(350, 225, 100, 25);
-  TrafficLight trafficLight4(350, 350, 100, 25);
+  // Create traffic lights (we control their states via priority check)
+  TrafficLight trafficLight1(450, 250, 25, 100); // Right side
+  TrafficLight trafficLight2(325, 250, 25, 100); // Left side
+  TrafficLight trafficLight3(350, 225, 100, 25); // Top side
+  TrafficLight trafficLight4(350, 350, 100, 25); // Bottom side
 
-  // Lanes for horizontal road
+  // Create lanes
+  // Horizontal lanes: left side (trafficLight2) and right side (trafficLight1)
   Lane lane1(200, 260, 150, 20, sf::Color::White, sf::Color::Red,
-             &trafficLight2);
+             &trafficLight2, true); // left
   Lane lane2(200, 290, 150, 20, sf::Color::White, sf::Color::Red,
              &trafficLight2);
   Lane lane3(200, 320, 150, 20, sf::Color::White, sf::Color::Red,
              &trafficLight2);
   Lane lane7(450, 260, 150, 20, sf::Color::White, sf::Color::Green,
-             &trafficLight1);
+             &trafficLight1); // right
   Lane lane8(450, 290, 150, 20, sf::Color::White, sf::Color::Green,
              &trafficLight1);
-
   Lane lane9(450, 320, 150, 20, sf::Color::White, sf::Color::Green,
-             &trafficLight1);
-
-  // Lanes for vertical road
+             &trafficLight1, true);
   Lane lane4(360, 100, 20, 150, sf::Color::White, sf::Color::Blue,
-             &trafficLight3);
+             &trafficLight3); // top
   Lane lane5(390, 100, 20, 150, sf::Color::White, sf::Color::Blue,
              &trafficLight3);
   Lane lane6(420, 100, 20, 150, sf::Color::White, sf::Color::Blue,
-             &trafficLight3);
+             &trafficLight3, true);
   Lane lane10(420, 350, 20, 150, sf::Color::White, sf::Color::Yellow,
-              &trafficLight4);
+              &trafficLight4); // bottom
   Lane lane11(390, 350, 20, 150, sf::Color::White, sf::Color::Yellow,
               &trafficLight4);
   Lane lane12(360, 350, 20, 150, sf::Color::White, sf::Color::Yellow,
-              &trafficLight4);
+              &trafficLight4, true);
 
-  // Threads for traffic lights
-  std::thread lightThread1(&TrafficLight::updateState, &trafficLight1);
-  std::thread lightThread2(&TrafficLight::updateState, &trafficLight2);
-  std::thread lightThread3(&TrafficLight::updateState, &trafficLight3);
-  std::thread lightThread4(&TrafficLight::updateState, &trafficLight4);
+  // Group lanes by side for priority checking.
+  std::vector<Lane *> leftLanes = {&lane1, &lane2, &lane3};
+  std::vector<Lane *> rightLanes = {&lane7, &lane8, &lane9};
+  std::vector<Lane *> topLanes = {&lane4, &lane5, &lane6};
+  std::vector<Lane *> bottomLanes = {&lane10, &lane11, &lane12};
+
+  Side currentPriority = Side::NONE;
+
+  // Lambda to check if any car intersects a given region.
+  auto anyCarInRegion = [&](const std::vector<Lane *> &lanes,
+                            const sf::FloatRect &region) -> bool {
+    for (auto lane : lanes) {
+      for (auto &car : lane->cars) {
+        if (car.shape.getGlobalBounds().intersects(region))
+          return true;
+      }
+    }
+    return false;
+  };
 
   std::srand(std::time(nullptr));
 
@@ -275,81 +289,57 @@ int main() {
         window.close();
     }
 
-    // Spawn cars randomly
-    if (std::rand() % 100 < 2) {  // 2% chance to spawn a car each frame
-      int side = std::rand() % 4; // Randomly choose one of the four sides
-      if (side == 0) {            // Left side
-        float laneY =
-            260 + (std::rand() % 3) *
-                      30; // Randomly choose one of the horizontal lanes
-        if (laneY == 260) {
-          lane1.addCar(Car(200, laneY, 20, 20, 0.5f, 0.0f, false, false,
-                           false)); // Red car
-        } else if (laneY == 290) {
+    // Spawn cars randomly (2% chance per frame)
+    if (std::rand() % 100 < 2) {
+      int side = std::rand() % 4;
+      if (side == 0) { // Left side
+        float laneY = 260 + (std::rand() % 3) * 30;
+        if (laneY == 260)
+          lane1.addCar(Car(200, laneY, 20, 20, 0.5f, 0.0f, false, false));
+        else if (laneY == 290) {
           int whichLane = std::rand() % 2;
-          if (whichLane == 0) {
-            lane2.addCar(
-                Car(200, laneY, 20, 20, 0.5f, 0.0f, true, false, false));
-          } else {
-            lane2.addCar(
-                Car(200, laneY, 20, 20, 0.5f, 0.0f, false, true, false));
-          }
+          if (whichLane == 0)
+            lane2.addCar(Car(200, laneY, 20, 20, 0.5f, 0.0f, true, false));
+          else
+            lane2.addCar(Car(200, laneY, 20, 20, 0.5f, 0.0f, false, true));
         }
-      }
-
-      else if (side == 1) { // Right side
-        float laneY =
-            260 + (std::rand() % 3) *
-                      30; // Randomly choose one of the horizontal lanes
-        if (laneY == 320) {
-          lane9.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f, false, false,
-                           false)); // Red car
-        } else if (laneY == 290) {
+      } else if (side == 1) { // Right side
+        float laneY = 260 + (std::rand() % 3) * 30;
+        if (laneY == 320)
+          lane9.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f, false, false));
+        else if (laneY == 290) {
           int whichLane = std::rand() % 2;
-          if (whichLane == 0) {
-            lane8.addCar(
-                Car(600, laneY, 20, 20, -0.5f, 0.0f, true, false, false));
-          } else {
-            lane8.addCar(
-                Car(600, laneY, 20, 20, -0.5f, 0.0f, false, true, false));
-          }
+          if (whichLane == 0)
+            lane8.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f, true, false));
+          else
+            lane8.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f, false, true));
         }
       } else if (side == 2) { // Top side
-        float laneX = 360 + (std::rand() % 3) *
-                                30; // Randomly choose one of the vertical lanes
+        float laneX = 360 + (std::rand() % 3) * 30;
         if (laneX == 390) {
           int whichLane = std::rand() % 2;
-          if (whichLane == 0) {
-            lane5.addCar(
-                Car(laneX, 100, 20, 20, 0.0f, 0.5f, true, false, false));
-          } else {
-            lane5.addCar(
-                Car(laneX, 100, 20, 20, 0.0f, 0.5f, false, true, false));
-          }
+          if (whichLane == 0)
+            lane5.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f, true, false));
+          else
+            lane5.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f, false, true));
         } else if (laneX == 420) {
-          lane6.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f, false, false,
-                           false)); // Red car
+          lane6.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f, false, false));
         }
-      } else if (side == 3) { // bottom side
-        float laneX = 360 + (std::rand() % 3) *
-                                30; // Randomly choose one of the vertical lanes
+      } else if (side == 3) { // Bottom side
+        float laneX = 360 + (std::rand() % 3) * 30;
         if (laneX == 390) {
           int whichLane = std::rand() % 2;
-          if (whichLane == 0) {
-            lane11.addCar(
-                Car(laneX, 500, 20, 20, 0.0f, -0.5f, true, false, false));
-          } else {
-            lane11.addCar(
-                Car(laneX, 500, 20, 20, 0.0f, -0.5f, false, true, false));
-          }
+          if (whichLane == 0)
+            lane11.addCar(Car(laneX, 500, 20, 20, 0.0f, -0.5f, true, false));
+          else
+            lane11.addCar(Car(laneX, 500, 20, 20, 0.0f, -0.5f, false, true));
         } else if (laneX == 360) {
-          lane12.addCar(Car(laneX, 500, 20, 20, 0.0f, -0.5f, false, false,
-                            false)); // Red car
+          lane12.addCar(Car(laneX, 500, 20, 20, 0.0f, -0.5f, false, false));
         }
       }
     }
 
-    // Update cars in lanes
+    // Update cars in all lanes
     lane1.updateCars();
     lane2.updateCars();
     lane3.updateCars();
@@ -363,6 +353,120 @@ int main() {
     lane11.updateCars();
     lane12.updateCars();
 
+    // === PRIORITY CHECK ===
+    // Define the base intersection region where cars are considered waiting.
+    sf::FloatRect intersectionRegion(350, 250, 100, 100);
+
+    // Count the stopped cars in each group.
+    int countLeft = countStopped(leftLanes);
+    int countRight = countStopped(rightLanes);
+    int countTop = countStopped(topLanes);
+    int countBottom = countStopped(bottomLanes);
+
+    // Determine active traffic light and lanes based on current priority.
+    TrafficLight *activeTrafficLight = nullptr;
+    std::vector<Lane *> *activeLanes = nullptr;
+    if (currentPriority == Side::LEFT) {
+      activeTrafficLight = &trafficLight2;
+      activeLanes = &leftLanes;
+    } else if (currentPriority == Side::RIGHT) {
+      activeTrafficLight = &trafficLight1;
+      activeLanes = &rightLanes;
+    } else if (currentPriority == Side::TOP) {
+      activeTrafficLight = &trafficLight3;
+      activeLanes = &topLanes;
+    } else if (currentPriority == Side::BOTTOM) {
+      activeTrafficLight = &trafficLight4;
+      activeLanes = &bottomLanes;
+    }
+
+    // Compute the extended region as the union of the base intersection region
+    // and the active traffic light’s bounds.
+    sf::FloatRect extendedRegion = intersectionRegion;
+    if (activeTrafficLight != nullptr) {
+      sf::FloatRect lightBounds = activeTrafficLight->shape.getGlobalBounds();
+      extendedRegion.left = std::min(intersectionRegion.left, lightBounds.left);
+      extendedRegion.top = std::min(intersectionRegion.top, lightBounds.top);
+      extendedRegion.width =
+          std::max(intersectionRegion.left + intersectionRegion.width,
+                   lightBounds.left + lightBounds.width) -
+          extendedRegion.left;
+      extendedRegion.height =
+          std::max(intersectionRegion.top + intersectionRegion.height,
+                   lightBounds.top + lightBounds.height) -
+          extendedRegion.top;
+    }
+
+    // If there is an active priority, check if its waiting count is below 5
+    // and no car is overlapping the extended region.
+    if (currentPriority != Side::NONE && activeTrafficLight != nullptr &&
+        activeLanes != nullptr) {
+      int activeCount = 0;
+      for (auto lane : *activeLanes) {
+        for (auto &car : lane->cars) {
+          if (car.stopped)
+            activeCount++;
+        }
+      }
+      if (activeCount < 5 && !anyCarInRegion(*activeLanes, extendedRegion))
+        currentPriority = Side::NONE;
+    }
+
+    // If no priority is set, assign one if any group has more than 10 stopped
+    // cars.
+    if (currentPriority == Side::NONE) {
+      if (countLeft > 10)
+        currentPriority = Side::LEFT;
+      else if (countRight > 10)
+        currentPriority = Side::RIGHT;
+      else if (countTop > 10)
+        currentPriority = Side::TOP;
+      else if (countBottom > 10)
+        currentPriority = Side::BOTTOM;
+    }
+
+    // Force only one light green at a time according to current priority.
+    {
+      std::lock_guard<std::mutex> lock(lightMutex);
+      if (currentPriority == Side::LEFT) {
+        trafficLight2.state = 1;
+        trafficLight1.state = 0;
+        trafficLight3.state = 0;
+        trafficLight4.state = 0;
+      } else if (currentPriority == Side::RIGHT) {
+        trafficLight1.state = 1;
+        trafficLight2.state = 0;
+        trafficLight3.state = 0;
+        trafficLight4.state = 0;
+      } else if (currentPriority == Side::TOP) {
+        trafficLight3.state = 1;
+        trafficLight1.state = 0;
+        trafficLight2.state = 0;
+        trafficLight4.state = 0;
+      } else if (currentPriority == Side::BOTTOM) {
+        trafficLight4.state = 1;
+        trafficLight1.state = 0;
+        trafficLight2.state = 0;
+        trafficLight3.state = 0;
+      } else {
+        // Default: all red.
+        trafficLight1.state = 0;
+        trafficLight2.state = 0;
+        trafficLight3.state = 0;
+        trafficLight4.state = 0;
+      }
+      // Update the fill colors.
+      trafficLight1.shape.setFillColor(
+          trafficLight1.colors[trafficLight1.state]);
+      trafficLight2.shape.setFillColor(
+          trafficLight2.colors[trafficLight2.state]);
+      trafficLight3.shape.setFillColor(
+          trafficLight3.colors[trafficLight3.state]);
+      trafficLight4.shape.setFillColor(
+          trafficLight4.colors[trafficLight4.state]);
+    }
+
+    // === Drawing ===
     {
       std::lock_guard<std::mutex> lock(lightMutex);
       window.clear();
@@ -390,7 +494,6 @@ int main() {
       window.draw(trafficLight2.shape);
       window.draw(trafficLight3.shape);
       window.draw(trafficLight4.shape);
-
       lane1.drawCars(window);
       lane2.drawCars(window);
       lane3.drawCars(window);
@@ -403,14 +506,9 @@ int main() {
       lane10.drawCars(window);
       lane11.drawCars(window);
       lane12.drawCars(window);
-
       window.display();
     }
   }
 
-  lightThread1.detach();
-  lightThread2.detach();
-  lightThread3.detach();
-  lightThread4.detach();
   return 0;
 }
