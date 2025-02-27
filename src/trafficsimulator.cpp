@@ -159,28 +159,54 @@ public:
         it->speedY = 0.0f;
         it->speedX = 0.5f;
         ++it; // Advance the iterator
-      } else if (carPos.x == 421 && carPos.y >= 320 && carPos.y <= 340) {
+      } else if (carPos.x == 441 && carPos.y >= 320 && carPos.y <= 340) {
         it->speedX = 0.0f;
         it->speedY = 0.5f;
         ++it; // Advance the iterator
-      } else if (carPos.y == 321 && carPos.x >= 360 && carPos.x <= 380) {
+      } else if (carPos.y == 341 && carPos.x >= 360 && carPos.x <= 380) {
         it->speedY = 0.0f;
         it->speedX = -0.5f;
-      } else if (it->isRight && !it->hasTurned && carPos.x == 390 &&
-                 carPos.x <= 410 && carPos.y >= 290 && carPos.y <= 310) {
-        if (it->speedX > 0) {
-          it->speedX = 0.0f;
-          it->speedY = 0.5f;
-        } else if (it->speedY > 0) {
-          it->speedY = 0.0f;
-          it->speedX = -0.5f;
-        } else if (it->speedX < 0) {
-          it->speedX = 0.0f;
-          it->speedY = -0.5f;
-        } else if (it->speedY < 0) {
-          it->speedY = 0.0f;
-          it->speedX = 0.5f;
-        }
+      }
+      // else if (it->isRight && !it->hasTurned && carPos.x == 390 &&
+      //            carPos.x <= 410 && carPos.y >= 290 && carPos.y <= 310) {
+      //   if (it->speedX > 0) {
+      //     it->speedX = 0.0f;
+      //     it->speedY = 0.5f;
+      //   } else if (it->speedY > 0) {
+      //     it->speedY = 0.0f;
+      //     it->speedX = -0.5f;
+      //   } else if (it->speedX < 0) {
+      //     it->speedX = 0.0f;
+      //     it->speedY = -0.5f;
+      //   } else if (it->speedY < 0) {
+      //     it->speedY = 0.0f;
+      //     it->speedX = 0.5f;
+      //   }
+      //   it->hasTurned = true;
+      // }
+
+      // new one
+      else if (it->isRight && !it->hasTurned && carPos.x >= 410 &&
+               carPos.x <= 430 && carPos.y >= 310 && carPos.y <= 330 &&
+               it->speedY > 0) {
+        it->speedY = 0.0f;
+        it->speedX = -0.5f;
+        it->hasTurned = true;
+
+      } else if (it->isRight && !it->hasTurned && carPos.x >= 390 &&
+                 carPos.x <= 410 && carPos.y == 291 && it->speedY < 0) {
+        it->speedY = 0.0f;
+        it->speedX = 0.5f;
+        it->hasTurned = true;
+      } else if (it->isRight && !it->hasTurned && carPos.x == 410 &&
+                 carPos.y >= 290 && carPos.y <= 310 && it->speedX > 0) {
+        it->speedX = 0.0f;
+        it->speedY = 0.5f;
+        it->hasTurned = true;
+      } else if (it->isRight && !it->hasTurned && carPos.x == 391 &&
+                 carPos.y >= 310 && carPos.y <= 330 && it->speedX < 0) {
+        it->speedX = 0.0f;
+        it->speedY = -0.5f;
         it->hasTurned = true;
       } else {
         ++it;
@@ -237,36 +263,37 @@ int main() {
   Road roadD(380, 100, 20, 400, "Road D", font);
 
   // Create traffic lights (we control their states via priority check)
-  TrafficLight trafficLight1(450, 250, 25, 100); // Right side
-  TrafficLight trafficLight2(325, 250, 25, 100); // Left side
-  TrafficLight trafficLight3(350, 225, 100, 25); // Top side
-  TrafficLight trafficLight4(350, 350, 100, 25); // Bottom side
+  TrafficLight trafficLight1(470, 250, 25, 120); // Right side
+  TrafficLight trafficLight2(325, 250, 25, 120); // Left side
+  TrafficLight trafficLight3(350, 225, 120, 25); // Top side
+  TrafficLight trafficLight4(350, 370, 120, 25); // Bottom side
 
   // Create lanes
-  // Horizontal lanes: left side (trafficLight2) and right side (trafficLight1)
+  // Horizontal lanes: left side (trafficLight2) and right side
+  // (trafficLight1)
   Lane lane1(200, 260, 150, 20, sf::Color::White, sf::Color::Red,
              &trafficLight2, true); // left
-  Lane lane2(200, 290, 150, 20, sf::Color::White, sf::Color::Red,
+  Lane lane2(200, 290, 150, 40, sf::Color::White, sf::Color::Red,
              &trafficLight2);
-  Lane lane3(200, 320, 150, 20, sf::Color::White, sf::Color::Red,
+  Lane lane3(200, 340, 150, 20, sf::Color::White, sf::Color::Red,
              &trafficLight2);
-  Lane lane7(450, 260, 150, 20, sf::Color::White, sf::Color::Green,
+  Lane lane7(470, 260, 150, 20, sf::Color::White, sf::Color::Green,
              &trafficLight1); // right
-  Lane lane8(450, 290, 150, 20, sf::Color::White, sf::Color::Green,
+  Lane lane8(470, 290, 150, 40, sf::Color::White, sf::Color::Green,
              &trafficLight1);
-  Lane lane9(450, 320, 150, 20, sf::Color::White, sf::Color::Green,
+  Lane lane9(470, 340, 150, 20, sf::Color::White, sf::Color::Green,
              &trafficLight1, true);
   Lane lane4(360, 100, 20, 150, sf::Color::White, sf::Color::Blue,
              &trafficLight3); // top
-  Lane lane5(390, 100, 20, 150, sf::Color::White, sf::Color::Blue,
+  Lane lane5(390, 100, 40, 150, sf::Color::White, sf::Color::Blue,
              &trafficLight3);
-  Lane lane6(420, 100, 20, 150, sf::Color::White, sf::Color::Blue,
+  Lane lane6(440, 100, 20, 150, sf::Color::White, sf::Color::Blue,
              &trafficLight3, true);
-  Lane lane10(420, 350, 20, 150, sf::Color::White, sf::Color::Black,
+  Lane lane10(440, 370, 20, 150, sf::Color::White, sf::Color::Black,
               &trafficLight4); // bottom
-  Lane lane11(390, 350, 20, 150, sf::Color::White, sf::Color::Black,
+  Lane lane11(390, 370, 40, 150, sf::Color::White, sf::Color::Black,
               &trafficLight4);
-  Lane lane12(360, 350, 20, 150, sf::Color::White, sf::Color::Black,
+  Lane lane12(360, 370, 20, 150, sf::Color::White, sf::Color::Black,
               &trafficLight4, true);
 
   // Group lanes by side for priority checking.
@@ -317,10 +344,10 @@ int main() {
             lane2.addCar(Car(200, laneY, 20, 20, 0.5f, 0.0f, false, true));
         }
       } else if (side == 1) { // Right side
-        float laneY = 260 + (std::rand() % 3) * 30;
-        if (laneY == 320)
+        float laneY = 280 + (std::rand() % 3) * 30;
+        if (laneY == 340)
           lane9.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f, false, false));
-        else if (laneY == 290) {
+        else if (laneY == 310) {
           int whichLane = std::rand() % 2;
           if (whichLane == 0)
             lane8.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f, true, false));
@@ -328,14 +355,14 @@ int main() {
             lane8.addCar(Car(600, laneY, 20, 20, -0.5f, 0.0f, false, true));
         }
       } else if (side == 2) { // Top side
-        float laneX = 360 + (std::rand() % 3) * 30;
-        if (laneX == 390) {
+        float laneX = 380 + (std::rand() % 3) * 30;
+        if (laneX == 410) {
           int whichLane = std::rand() % 2;
           if (whichLane == 0)
             lane5.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f, true, false));
           else
             lane5.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f, false, true));
-        } else if (laneX == 420) {
+        } else if (laneX == 440) {
           lane6.addCar(Car(laneX, 100, 20, 20, 0.0f, 0.5f, false, false));
         }
       } else if (side == 3) { // Bottom side
@@ -393,8 +420,8 @@ int main() {
       activeLanes = &bottomLanes;
     }
 
-    // Compute the extended region as the union of the base intersection region
-    // and the active traffic light’s bounds.
+    // Compute the extended region as the union of the base intersection
+    // region and the active traffic light’s bounds.
     sf::FloatRect extendedRegion = intersectionRegion;
     if (activeTrafficLight != nullptr) {
       sf::FloatRect lightBounds = activeTrafficLight->shape.getGlobalBounds();
@@ -438,8 +465,8 @@ int main() {
         currentPriority = Side::BOTTOM;
     }
 
-    // If no priority is set, find the lane with the most cars and set its light
-    // to green
+    // If no priority is set, find the lane with the most cars and set its
+    // light to green
     if (currentPriority == Side::NONE) {
       if (currentLane == nullptr || currentLane->cars.size() == 0) {
         currentLane = findLaneWithMostCars({&lane1, &lane2, &lane3, &lane4,
