@@ -68,6 +68,12 @@ Execute the compiled program:
 
 ## How It Works
 
+### GIFS
+
+![](gifs/gif1.gif)
+
+![](gifs/gif2.gif)
+
 ### Intersection Layout
 
 The simulation models a four-way intersection with:
