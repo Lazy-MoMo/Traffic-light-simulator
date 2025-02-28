@@ -46,8 +46,8 @@ brew install sfml
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/Lazy-MoMo/traffic-simulation.git
-cd traffic-simulation
+git clone https://github.com/Lazy-MoMo/dsa-queue-simulator.git
+cd dsa-queue-simulator/src/
 ```
 
 2. Compile the source code:
