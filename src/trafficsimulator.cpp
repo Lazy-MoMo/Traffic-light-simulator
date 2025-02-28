@@ -680,7 +680,6 @@ int main() {
           trafficLight4.colors[trafficLight4.state]);
     }
 
-    // === Drawing ===
     {
       std::lock_guard<std::mutex> lock(lightMutex);
       window.clear();

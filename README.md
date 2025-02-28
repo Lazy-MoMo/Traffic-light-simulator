@@ -53,7 +53,7 @@ cd traffic-simulation
 2. Compile the source code:
 
 ```bash
-g++ -std=c++11 -o traffic_simulation main.cpp -lsfml-graphics -lsfml-window -lsfml-system
+make
 ```
 
 ## Running the Simulation
@@ -61,7 +61,7 @@ g++ -std=c++11 -o traffic_simulation main.cpp -lsfml-graphics -lsfml-window -lsf
 Execute the compiled program:
 
 ```bash
-./traffic_simulation
+./traffic_sim
 ```
 
 - Press `Q` to quit the simulation.
